@@ -30,9 +30,19 @@ sudo ./run_all.sh all
     │
 FTL内部测试 ──→ GC压力/写放大/SLC缓存/竞态
     │
-NAND物理测试 ──→ 读干扰/边界对齐/数据完整性
+NAND物理测试 ──→ 读干扰/边界对齐/数据完整性/Pattern敏感性
     │
 稳定性测试 ──→ 热降频/稳定态/不规则IO
+     │
+长时稳定 ──→ 浸泡测试/LBA映射压力
+     │
+NAND物理 ──→ 读干扰/边界对齐/数据完整性/Pattern敏感性
+     │
+固件特性 ──→ 写入缓存/时序模式/Sanitize/电源管理
+     │
+底层硬件 ──→ Boot分区SLC/FUA语义/DMA边界/多分区并发/HW Reset
+     │
+规范特性 ──→ 5.x寄存器校验/CMDQ命令队列/BKOPS后台操作
 ```
 
 ## 测试项目详解
@@ -58,10 +68,10 @@ NAND物理测试 ──→ 读干扰/边界对齐/数据完整性
 
 | 测试 | 脚本 | 检测目标 |
 |------|------|---------|
-| **GC压力** | `tests/ftl_gc_stress.sh` | GC延迟尖峰频率和幅度，100ms粒度监测5分钟 |
-| **写放大** | `tests/write_amplification.sh` | FTL内部写放大因子，不同模式对比推算 |
+| **GC压力** | `tests/ftl_gc.sh` | GC延迟尖峰频率和幅度，100ms粒度监测5分钟 |
+| **写放大** | `tests/write_amp.sh` | FTL内部写放大因子，不同模式对比推算 |
 | **SLC缓存** | `tests/slc_cache.sh` | SLC缓存大小、拐点位置、TLC直写速度 |
-| **多线程竞态** | `tests/multithread_contention.sh` | 读挨饿、写挨饿、32线程死锁检测 |
+| **多线程竞态** | `tests/contention.sh` | 读挨饿、写挨饿、32线程死锁检测 |
 
 ### 定位 NAND/Controller 问题
 
@@ -69,9 +79,50 @@ NAND物理测试 ──→ 读干扰/边界对齐/数据完整性
 |------|------|---------|
 | **读干扰** | `tests/read_disturb.sh` | 50万次读干扰后数据是否损坏 |
 | **数据完整性** | `tests/data_integrity.sh` | 多pattern校验、跨EB边界、延迟读取 |
-| **边界对齐** | `tests/erase_block_boundary.sh` | 跨page/block边界IO、partial page program |
+| **边界对齐** | `tests/boundary.sh` | 跨page/block边界IO、partial page program |
 | **不规则IO** | `tests/erratic_io.sh` | 非标块大小、混合engine、sync风暴 |
-| **热降频** | `tests/thermal_throttle.sh` | 温升监测、throttle事件检测、恢复验证 |
+| **热降频** | `tests/thermal.sh` | 温升监测、throttle事件检测、恢复验证 |
+
+### 长时稳定 + 映射压力
+
+| 测试 | 脚本 | 检测目标 |
+|------|------|---------|
+| **长时浸泡** | `tests/longhaul.sh` | 6小时混合负载, 检测固件资源泄漏/定时器溢出/性能衰减 |
+| **LBA映射压力** | `tests/lba_remap.sh` | FTL映射缓存thrashing, 多线程并发映射表竞争 |
+
+### 定位 NAND 数据模式 + FTL映射
+
+| 测试 | 脚本 | 检测目标 |
+|------|------|---------|
+| **NAND Pattern敏感性** | `tests/pattern_sensitivity.sh` | cell-to-cell干扰与数据模式依赖、scrambler实现bug、ECC校正遗漏 |
+| **LBA映射表压力** | `tests/lba_remap.sh` | FTL映射缓存thrashing、分散区域映射错误、并发映射表竞争 |
+
+### 定位 eMMC固件特性问题
+
+| 测试 | 脚本 | 检测目标 |
+|------|------|---------|
+| **写入缓存** | `tests/cache_fsync.sh` | 缓存ON/OFF数据一致性、fsync延迟随QD变化、sync+direct混用互斥 |
+| **时序模式** | `tests/timing_mode.sh` | HS400/HS200稳定性、各模式数据校验、硬件错误计数 |
+| **Sanitize** | `tests/sanitize.sh` | 安全擦除完成状态、擦除后数据清零验证、擦除后性能恢复 |
+| **电源管理** | `tests/power_mgmt.sh` | Sleep/Wake后数据一致、RPM自动挂起恢复、系统挂起仿真 |
+
+### 底层硬件/控制器/Subsystem
+
+| 测试 | 脚本 | 检测目标 |
+|------|------|---------|
+| **Boot分区** | `tests/boot_partition.sh` | SLC模式可靠性、多轮写磨耗、pattern遍历、备份恢复 |
+| **FUA/Barrier** | `tests/fua_barrier.sh` | FUA绕过缓存语义、与非FUA顺序保持、cache ON下FUA行为 |
+| **DMA边界** | `tests/dma_boundary.sh` | 64K~64M地址边界跨越、DMA传输数据损坏 |
+| **多分区并发** | `tests/multi_partition.sh` | Boot0/Boot1/User 三分区同时IO、分区切换上下文混乱 |
+| **HW Reset** | `tests/hw_reset.sh` | 复位后映射表重建、频繁复位状态机、IO中复位卡死、旧数据残留 |
+
+### eMMC 5.x 规范特性
+
+| 测试 | 脚本 | 检测目标 |
+|------|------|---------|
+| **规范校验** | `tests/spec_compliance.sh` | EXT_CSD寄存器验证、特性声明vs实际能力、健康状态、时序可达性 |
+| **CMDQ** | `tests/cmdq_stress.sh` | 最大队列深度调度、多线程CMDQ并发、队列drain刷新、QD步进伸缩效率 |
+| **BKOPS** | `tests/bkops_monitor.sh` | 后台操作触发监测、写后空闲期延迟尖峰、BKOPS使能状态检查 |
 
 ## 用法
 
@@ -84,6 +135,15 @@ sudo ./run_all.sh profiling
 
 # FTL/NAND深度排查
 sudo ./run_all.sh deep
+
+# 长时稳定性测试（6小时浸泡+LBA映射压力）
+sudo ./run_all.sh soak
+
+# eMMC 5.x 规范特性（寄存器校验+CMDQ+BKOPS）
+sudo ./run_all.sh spec
+
+# 固件特性专项（缓存/时序/Sanitize/电源）
+sudo ./run_all.sh firmware
 
 # 数据完整性专项
 sudo ./run_all.sh integrity

@@ -18,7 +18,7 @@ banner() {
   echo ""
   echo "╔══════════════════════════════════════════════════════╗"
   echo "║        eMMC Compatibility Test Suite                 ║"
-  echo "║     Rock 5B · Linux 6.1.43 · fio                    ║"
+  echo "║        Rock 5B · Linux 6.1.43 · fio                  ║"
   echo "╚══════════════════════════════════════════════════════╝"
   echo ""
   echo "设备: $EMMC_DEV"
@@ -41,22 +41,49 @@ usage() {
   echo "    bs_scan      - 块大小扫描"
   echo "    qd_scan      - 队列深度扫描"
   echo ""
-  echo "  深层问题定位 (FTL/NAND/Controller):"
-  echo "    ftl_gc          - FTL垃圾回收+延迟尖峰检测"
-  echo "    write_amp       - 写入放大测试"
-  echo "    read_disturb    - 读干扰测试"
-  echo "    data_integrity  - 数据完整性校验"
-  echo "    slc_cache       - SLC缓存耗尽+性能悬崖"
-  echo "    contention      - 多线程竞态(读挨饿/死锁)"
-  echo "    erratic_io      - 不规则IO模式(触发固件bug)"
-  echo "    thermal         - 热降频+老化模拟"
-  echo "    boundary        - 擦除块/页边界测试"
-  echo ""
-  echo "  快捷方式:"
-  echo "    quick        - 快速验证 (顺序+随机+混合)"
-  echo "    profiling    - 性能画像 (顺序+随机+bs_scan+qd_scan)"
-  echo "    deep         - FTL/NAND深度问题排查"
-  echo "    integrity    - 数据完整性专项"
+echo "  深层问题定位 (FTL/NAND/Controller):"
+echo "    ftl_gc              - FTL垃圾回收+延迟尖峰检测"
+echo "    write_amp           - 写入放大测试"
+echo "    read_disturb        - 读干扰测试"
+echo "    data_integrity      - 数据完整性校验"
+echo "    slc_cache           - SLC缓存耗尽+性能悬崖"
+echo "    contention          - 多线程竞态(读挨饿/死锁)"
+echo "    erratic_io          - 不规则IO模式(触发固件bug)"
+echo "    thermal             - 热降频+老化模拟"
+echo "    boundary            - 擦除块/页边界测试"
+echo "    pattern_sensitivity - NAND数据pattern敏感性"
+echo "    lba_remap           - LBA映射表压力(FTL缓存thrashing)"
+echo ""
+echo "  eMMC固件特性专项:"
+echo "    cache_fsync         - 写入缓存 + fsync压力"
+echo "    timing_mode         - HS400/HS200时序稳定性"
+echo "    sanitize            - Sanitize安全擦除测试"
+echo "    power_mgmt          - Sleep/Wake + 挂起恢复"
+echo ""
+echo "  长时稳定专项:"
+echo "    longhaul            - 长时间浸泡测试(6h+固件资源泄漏)"
+echo ""
+echo "  底层硬件/控制器/subsystem:"
+echo "    boot_partition      - Boot分区SLC模式可靠性"
+echo "    fua_barrier         - FUA/barrier缓存旁路语义"
+echo "    dma_boundary        - DMA地址边界跨越(控制器对齐)"
+echo "    multi_partition     - 多分区并发访问(分区切换上下文)"
+echo "    hw_reset            - HW Reset复位稳定性(映射表重建)"
+echo ""
+echo "  eMMC 5.x 规范特性:"
+echo "    spec_compliance     - 5.x规范特性校验(EXT_CSD寄存器)"
+echo "    cmdq_stress         - CMDQ命令队列调度压力"
+echo "    bkops_monitor       - BKOPS后台操作监测+延迟影响"
+echo ""
+echo "  快捷方式:"
+echo "    quick        - 快速验证 (顺序+随机+混合)"
+echo "    profiling    - 性能画像 (顺序+随机+bs_scan+qd_scan)"
+echo "    deep         - FTL/NAND深度问题排查"
+echo "    integrity    - 数据完整性专项"
+echo "    firmware     - 固件特性专项 (cache+timing+sanitize+power)"
+echo "    soak         - 稳定专项 (longhaul+lba_remap)"
+echo "    hw           - 底层硬件 (boot分区/FUA/DMA边界/多分区/复位)
+    spec         - eMMC 5.x 规范特性 (spec/cmdq/bkops)"
   echo ""
   echo "选项:"
   echo "  --device DEV   指定 eMMC 设备 (默认: $EMMC_DEV)"
@@ -80,12 +107,16 @@ DRY_RUN=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    all) TESTS+=("sequential" "random" "mixed" "stress" "latency" "steady" "trim" "fill" "bs_scan" "qd_scan" "ftl_gc" "write_amp" "read_disturb" "data_integrity" "slc_cache" "contention" "erratic_io" "thermal" "boundary") ;;
+    all) TESTS+=("sequential" "random" "mixed" "stress" "latency" "steady" "trim" "fill" "bs_scan" "qd_scan" "ftl_gc" "write_amp" "read_disturb" "data_integrity" "slc_cache" "contention" "erratic_io" "thermal" "boundary" "cache_fsync" "timing_mode" "sanitize" "power_mgmt" "pattern_sensitivity" "longhaul" "lba_remap" "boot_partition" "fua_barrier" "dma_boundary" "multi_partition" "hw_reset" "spec_compliance" "cmdq_stress" "bkops_monitor") ;;
     quick) TESTS+=("sequential" "random" "mixed") ;;
     profiling) TESTS+=("sequential" "random" "bs_scan" "qd_scan") ;;
-    deep) TESTS+=("ftl_gc" "write_amp" "read_disturb" "data_integrity" "slc_cache" "contention" "erratic_io" "thermal" "boundary") ;;
+    deep) TESTS+=("ftl_gc" "write_amp" "read_disturb" "data_integrity" "slc_cache" "contention" "erratic_io" "thermal" "boundary" "pattern_sensitivity" "lba_remap") ;;
     integrity) TESTS+=("data_integrity" "read_disturb" "trim") ;;
-    sequential|random|mixed|stress|latency|steady|trim|fill|bs_scan|qd_scan|ftl_gc|write_amp|read_disturb|data_integrity|slc_cache|contention|erratic_io|thermal|boundary)
+    firmware) TESTS+=("cache_fsync" "timing_mode" "sanitize" "power_mgmt") ;;
+    soak) TESTS+=("longhaul" "lba_remap") ;;
+    hw) TESTS+=("boot_partition" "fua_barrier" "dma_boundary" "multi_partition" "hw_reset") ;;
+    spec) TESTS+=("spec_compliance" "cmdq_stress" "bkops_monitor") ;;
+    sequential|random|mixed|stress|latency|steady|trim|fill|bs_scan|qd_scan|ftl_gc|write_amp|read_disturb|data_integrity|slc_cache|contention|erratic_io|thermal|boundary|cache_fsync|timing_mode|sanitize|power_mgmt|pattern_sensitivity|longhaul|lba_remap|boot_partition|fua_barrier|dma_boundary|multi_partition|hw_reset|spec_compliance|cmdq_stress|bkops_monitor)
       TESTS+=("$1") ;;
     --device) EMMC_DEV="$2"; shift ;;
     --mount) MOUNT_POINT="$2"; shift ;;
@@ -104,6 +135,11 @@ if [ ${#TESTS[@]} -eq 0 ]; then
   exit 1
 fi
 
+# 如果未指定设备, 交互选择
+if [ -z "$EMMC_DEV" ]; then
+  select_device
+fi
+
 # --- 主流程 ---
 banner
 check_deps
@@ -117,6 +153,8 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 prepare_env
+
+init_test_table
 
 START_TIME=$(date +%s)
 
@@ -136,21 +174,33 @@ for t in "${TESTS[@]}"; do
     continue
   fi
 
+  TEST_START=$(date +%s)
   echo -e "${GREEN}[RUN]${NC} 测试: ${t}"
   echo "──────────────────────────────────────────"
 
   if bash "$script"; then
-    echo -e "${GREEN}[PASS]${NC} ${t}"
+    STATUS="PASS"
     PASS=$((PASS + 1))
   else
-    echo -e "${RED}[FAIL]${NC} ${t}"
+    STATUS="FAIL"
     FAIL=$((FAIL + 1))
     FAILED_TESTS+=("$t")
   fi
 
-  echo "──────────────────────────────────────────"
+  TEST_END=$(date +%s)
+  TEST_DURATION=$((TEST_END - TEST_START))
+  if [ $TEST_DURATION -ge 60 ]; then
+    DUR_STR="$((TEST_DURATION / 60))m$((TEST_DURATION % 60))s"
+  else
+    DUR_STR="${TEST_DURATION}s"
+  fi
+
+  add_table_row "$t" "$STATUS" "$DUR_STR"
+
   echo ""
 done
+
+close_test_table
 
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
